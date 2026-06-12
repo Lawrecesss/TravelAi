@@ -1,4 +1,6 @@
-from tools.tools import get_seasonal_weather_avg, get_weather_by_city, web_search, search_attractions
+from tools.tools import get_seasonal_weather_avg, get_weather_by_city, vector_db_search, web_search
+from tools.ingest import run_ingestion
+from dotenv import load_dotenv
 
 def test_web_search():
     query = "average flight ticket price from Myanmar to Singapore in December"
@@ -10,14 +12,15 @@ def test_get_weather():
     result = get_seasonal_weather_avg(city, "July")
     print(result)
 
-def test_search_attractions():
-    city = "Tokyo"
-    category = "food"
-    result = search_attractions(city, category)
-    assert "Recommended food spots in Tokyo" in result
+def test_vector_db_search():
+    query = "What are the top attractions in Bali?"
+    result = vector_db_search(query)
+    print(result)
 
 if __name__ == "__main__":
+    run_ingestion()  # Ensure the vector database is populated before testing search
     # test_web_search()
-    test_get_weather()
+    # test_get_weather()
+    test_vector_db_search()
     # test_search_attractions()
     # print("All tests passed!")

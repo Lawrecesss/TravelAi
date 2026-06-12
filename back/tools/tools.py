@@ -7,15 +7,21 @@ from langchain_core.tools import tool
 import requests
 from tavily import TavilyClient
 from dotenv import load_dotenv
+from pinecone import Pinecone
 from tools.weather_helper import interpret_weather_code, get_coordinates
 from tools.params_and_wmo import HISTORICAL_YEARS, PAST_WEATHER_URL, RAINY_DAY_THRESHOLD_MM, WEATHER_URL, params
 
-load_dotenv()  # Load environment variables from .env file
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", "env.secret"))
 tavily_client = TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
 
 # @tool
 def web_search(query: str) -> str:
-    """Search the web for up-to-date travel blogs, itineraries, and local insights."""
+    """
+    Useful for retrieving real-time information on flight prices, local events, or any rapidly changing travel details that may not be captured in the static knowledge base.
+    Search the web for up-to-date travel blogs, itineraries, and local insights.
+    Input should be a natural language query related to travel planning (e.g., "average flight ticket price from Myanmar to Singapore in December" or "current COVID-19 restrictions in Tokyo").
+    This tool uses the Tavily API to perform a web search and returns the most relevant answer or information snippet to the agent for use in itinerary planning or answering user questions.
+    """
     response = tavily_client.search(query=query, search_depth="basic", include_answer=True) #later chenge to "advance" for better results
     return response["answer"] if "answer" in response else "No results found. Please try a different query."
     # return response["results"][0]["content"] if response["results"] else "No results found. Please try a different query."
@@ -138,15 +144,32 @@ def get_seasonal_weather_avg(city: str, month: str) -> dict:
     except Exception as e:
         return {"error": f"Historical baseline calculation failed: {str(e)}"}
 
-@tool
-def search_attractions(city: str, category: str) -> str:
-    """Search a local database/API for attractions based on a category (e.g., food, nature, history)."""
-    # Simulated internal DB lookup
-    attractions = {
-        "tokyo": {"food": "Tsukiji Outer Market, Omoide Yokocho", "culture": "Senso-ji Temple, Meiji Shrine"},
-        "paris": {"food": "Le Marais food tour", "culture": "Louvre Museum, Eiffel Tower"}
-    }
-    city_lower = city.lower()
-    if city_lower in attractions:
-        return f"Recommended {category} spots in {city}: {attractions[city_lower].get(category, 'Central downtown loop')}"
-    return f"Explore central attractions and popular local districts in {city}."
+# @tool
+def vector_db_search(query: str) -> str:
+    """
+    Useful for retrieving localized, contextually relevant information from the curated knowledge base during itinerary planning or when answering specific questions about a destination, budget considerations, activities.
+    Input should be a natural language query related to travel planning (e.g., "What are the top attractions in Bali?" or "Give me budget tips for Tokyo.").
+    This tool performs a vector similarity search against the Pinecone index where the curated knowledge base is stored, returning the most relevant text chunks as context for the agent's response generation.
+    """
+    pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
+    index = pc.Index(os.getenv("PINECONE_INDEX_NAME"))
+    
+    # Runtime context matching query needs input_type="query"
+    embedding_res = pc.inference.embed(
+        model="llama-text-embed-v2",
+        inputs=[query],
+        parameters={"input_type": "query"}
+    )
+    
+    query_vector = embedding_res.data[0].values
+    results = index.query(vector=query_vector, top_k=3, include_metadata=True)
+    
+    matched_contexts = []
+    for match in results.get("matches", []):
+        if "text" in match.get("metadata", {}):
+            matched_contexts.append(match["metadata"]["text"])
+            
+    if not matched_contexts:
+        return "No local curated knowledge records found for this location matrix query."
+        
+    return "\n---\n".join(matched_contexts)
