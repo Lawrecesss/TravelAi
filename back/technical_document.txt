@@ -1,0 +1,93 @@
+TravelAi Backend Technical Document
+==================================
+
+1. Architecture
+----------------
+
+The backend is built as a lightweight FastAPI service that exposes a single agent endpoint and an optional user preference ingestion endpoint.
+
+- `main.py` is the entrypoint.
+  - Loads environment variables from `.env.secret`.
+  - Creates a FastAPI app with an API root endpoint and two POST endpoints:
+    - `/api/chat` for agent interaction.
+    - `/api/preferences/ingest` for storing user preferences in Pinecone.
+  - Initializes Pinecone once at module import time and reuses the same client/index for preference lookup.
+  - Uses `travel_agent_graph` from `core/agent.py` to handle the actual reasoning loop.
+
+- `core/agent.py` defines the agent architecture and tool integration.
+  - Uses `langchain_openrouter.ChatOpenRouter` to connect to OpenRouter with `openai/gpt-4o-mini`.
+  - Uses `langgraph.prebuilt.create_react_agent` to create a ReAct-style agent.
+  - Adds `MemorySaver` from `langgraph.checkpoint.memory` to persist conversation state across invocations.
+  - Registers a tool suite that includes weather, seasonal weather, vector DB search, and web search capabilities.
+
+- `tools/tools.py` hosts custom agent tools.
+  - Uses `langchain_core.tools.tool` decorators to expose Python functions as callable tools.
+  - Integrates third-party APIs and services directly inside tool implementations.
+
+2. Tool Selection
+-------------------
+
+The system is designed around a small curated toolset that provides travel-specific knowledge retrieval and live data access. Selected tools are:
+
+- `get_weather_by_city(city_name: str) -> dict`
+  - Uses Open-Meteo geocoding and forecast APIs.
+  - Returns current weather and 7-day forecast summaries.
+  - Uses `tools.weather_helper` for WMO code interpretation.
+
+- `get_seasonal_weather_avg(city: str, month: str) -> dict`
+  - Uses Open-Meteo archival historical data.
+  - Computes multi-year averages, dominant weather patterns, and precipitation baselines.
+  - Useful for planning travel around climate expectations.
+
+- `vector_db_search(query: str) -> str`
+  - Uses Pinecone to query a curated local knowledge index.
+  - Embeds queries via Pinecone inference with `llama-text-embed-v2`.
+  - Returns top matched content chunks to enrich agent responses.
+
+- `web_search(query: str) -> str`
+  - Uses Tavily API for real-time web search and current local information.
+  - Enables retrieval of rapidly changing travel data like flight prices, events, and restrictions.
+
+Tool selection is intentionally narrow to keep the agent focused on travel planning and to minimize provider routing complexity.
+
+3. Memory Design
+------------------
+
+The backend uses a hybrid memory design combining short-term conversational state and long-term user preferences.
+
+- Short-term memory
+  - `MemorySaver` from LangGraph stores conversation state across agent invocations.
+  - The `/api/chat` endpoint passes a `thread_id` in `config = {"configurable": {"thread_id": active_thread_id}}`.
+  - This allows the LangGraph agent to persist state and preserve reasoning context for follow-up user messages.
+
+- Long-term preference memory
+  - User preferences are stored in Pinecone in the `preferences` namespace.
+  - The `/api/preferences/ingest` endpoint vectorizes user preference text and upserts it into Pinecone.
+  - During `/api/chat`, the backend queries Pinecone by metadata filter on `user_id`.
+  - If a preference record exists, it injects a system message summarizing the user profile into the prompt.
+
+- Data flow for memory
+  - Incoming chat request -> optional preference lookup -> build input message list
+  - If user preference exists, prepend a system instruction containing preference text
+  - Agent receives the composed message list and the thread_id context
+  - Agent responds and state is checkpointed for future continuity
+
+4. Deployment / Runtime Considerations
+--------------------------------------
+
+- Environment variables:
+  - `OPENROUTER_API_KEY`
+  - `PINECONE_API_KEY`
+  - `PINECONE_INDEX_NAME`
+  - `TAVILY_API_KEY`
+
+- Dependencies are managed in `requirements.txt`.
+- The backend expects Python 3.12+ with FastAPI, LangGraph, LangChain, Pinecone, and OpenRouter libraries installed.
+- The current model is optimized for faster test response times with `openai/gpt-4o-mini`.
+
+5. Notes
+---------
+
+- The design intentionally separates agent orchestration from tool implementation.
+- Pinecone is used both for user personalization and for tool-based vector retrieval.
+- The architecture supports future expansion by adding more tools to `tools/tools.py` and registering them in `core/agent.py`.

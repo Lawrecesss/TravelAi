@@ -57,7 +57,7 @@ async def ingest_user_preference(payload: UserPreferenceRequest):
                 {
                     "id": record_id,
                     "values": pc.inference.embed(
-                        model="multilingual-e5-large",  # Ensure this matches your existing index dimension (1024)
+                        model="llama-text-embed-v2",  # Ensure this matches your existing index dimension (1024)
                         inputs=[payload.preference],
                         parameters={"input_type": "passage", "truncate": "END"}
                     )[0]["values"],
