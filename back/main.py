@@ -12,7 +12,7 @@ load_dotenv(".env.secret")
 from core.agent import travel_agent_graph
 from pinecone import Pinecone
 
-app = FastAPI(title="TravelAi Agent REST API with Personalization")
+app = FastAPI(title="TravelAi Agent REST API with Personalization", docs_url="/docs", redoc_url="/redoc", version="1.0.0", description="API for interacting with the TravelAi Planner agent, including endpoints for user preference ingestion and multi-turn chat interactions with personalized context retrieval.")
 
 # Initialize Pinecone client connection
 pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
