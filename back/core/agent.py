@@ -1,18 +1,12 @@
-import os
-from dotenv import load_dotenv
 from langchain_openrouter import ChatOpenRouter
 from langgraph.prebuilt import create_react_agent
-from langgraph.checkpoint.memory import MemorySaver  # Dedicated checkpointer wrapper
-
-# Import your tools
+from langgraph.checkpoint.memory import MemorySaver
 from tools.tools import get_weather_by_city, vector_db_search, web_search, get_seasonal_weather_avg
-
-load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env.secret"))
 
 # Define tools list
 tools_list = [get_weather_by_city, get_seasonal_weather_avg, vector_db_search, web_search]
 
-# Native ChatOpenRouter Initialization
+# ChatOpenRouter Initialization
 model = ChatOpenRouter(
     model="openai/gpt-4o-mini",
     temperature=0,

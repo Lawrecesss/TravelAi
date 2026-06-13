@@ -6,13 +6,10 @@ from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 from dotenv import load_dotenv
 
-# 1. Ensure environment variables load BEFORE importing the graph
+
 load_dotenv(".env.secret")
 
-# Import your compiled LangGraph agent graph instance
 from core.agent import travel_agent_graph
-
-# Import Pinecone to fetch the preferences
 from pinecone import Pinecone
 
 app = FastAPI(title="TravelAi Agent REST API with Personalization")
@@ -51,21 +48,11 @@ async def root_landing_page():
 @app.post("/api/preferences/ingest", status_code=status.HTTP_201_CREATED)
 async def ingest_user_preference(payload: UserPreferenceRequest):
     try:
-        # 1. Initialize the Pinecone client natively using your existing environment variables
-        pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
-        index_name = os.getenv("PINECONE_INDEX_NAME")
-        
         if not index_name:
             raise HTTPException(status_code=500, detail="PINECONE_INDEX_NAME environment variable is not set.")
-            
-        index = pc.Index(index_name)
         
-        # 2. Generate a clean unique ID for this specific preference vector record
         record_id = f"pref_{payload.user_id}_{uuid.uuid4().hex[:8]}"
-        
-        # 3. Embed and upsert natively using Pinecone Inference
-        # We use input_type="passage" because we are ingesting a data record into the database
-        index.upsert(
+        pinecone_index.upsert(
             vectors=[
                 {
                     "id": record_id,
