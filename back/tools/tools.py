@@ -19,7 +19,7 @@ def web_search(query: str) -> str:
     Input should be a natural language query related to travel planning (e.g., "average flight ticket price from Myanmar to Singapore in December" or "current COVID-19 restrictions in Tokyo").
     This tool uses the Tavily API to perform a web search and returns the most relevant answer or information snippet to the agent for use in itinerary planning or answering user questions.
     """
-    response = tavily_client.search(query=query, search_depth="advance", include_answer=True) #later chenge to "advance" for better results
+    response = tavily_client.search(query=query, search_depth="advanced", include_answer=True) #later chenge to "advanced" for better results
     return response["answer"] if "answer" in response else "No results found. Please try a different query."
     # return response["results"][0]["content"] if response["results"] else "No results found. Please try a different query."
     
