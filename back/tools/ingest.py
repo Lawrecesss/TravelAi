@@ -1,10 +1,7 @@
 import os
-from dotenv import load_dotenv
 from pinecone import Pinecone, ServerlessSpec
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from tools.sample_docs import DOCS
-
-load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", "env.secret"))
 
 def run_ingestion():
     pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
@@ -28,12 +25,12 @@ def run_ingestion():
         chunk_overlap=200
     )
 
-    vectors_by_namespace: dict[str, list] = {}
+    vectors_to_upsert = []
     records = [
         {
             "id": doc["id"],
-            "inputs": {"text": doc["text"]},
-            "metadata": {k: v for k, v in doc.items() if k != "id"},
+            "text": doc["text"], 
+            "metadata": {k: v for k, v in doc.items() if k not in ["id", "text"]},
         }
         for doc in DOCS
     ]
@@ -47,20 +44,14 @@ def run_ingestion():
                 parameters={"input_type": "passage", "truncate": "END"}
             )
             
-            vectors_by_namespace.setdefault(doc["metadata"].get("destination"), []).append({
+            vectors_to_upsert.append({
             "id":     f"{doc['id']}_chunk_{idx}",
             "values": embedding_res.data[0].values,
-            "metadata": {
-                "text":     chunk,
-                "destination":     doc["metadata"].get("destination"),
-                "source": doc["metadata"].get("source"),
-                "category": doc["metadata"].get("category"),
-            }
+            "metadata": doc["metadata"] | {"chunk": chunk}
         })
 
     # Upsert to Vector Store
-    for namespace, vectors in vectors_by_namespace.items():
-        index.upsert(vectors=vectors, namespace=namespace)
+    index.upsert(vectors=vectors_to_upsert)
     print(f"Successfully ingested chunks into Pinecone index '{index_name}'.")
 
 # if __name__ == "__main__":

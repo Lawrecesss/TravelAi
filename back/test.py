@@ -1,7 +1,9 @@
+import os
+from dotenv import load_dotenv
 from tools.tools import get_seasonal_weather_avg, get_weather_by_city, vector_db_search, web_search
 from tools.ingest import run_ingestion
-from dotenv import load_dotenv
 
+load_dotenv(".env.secret")
 def test_web_search():
     query = "average flight ticket price from Myanmar to Singapore in December"
     result = web_search(query)
@@ -18,7 +20,7 @@ def test_vector_db_search():
     print(result)
 
 if __name__ == "__main__":
-    run_ingestion()  # Ensure the vector database is populated before testing search
+    # run_ingestion()  # Ensure the vector database is populated before testing search
     # test_web_search()
     # test_get_weather()
     test_vector_db_search()

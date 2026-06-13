@@ -40,7 +40,7 @@ RAINY_DAY_THRESHOLD_MM   = 1.0
 params = {
     "weather_param": {
         "current_weather": "true",
-        "daily": "weathercode, temperature_2m_mean,temperature_2m_max,temperature_2m_min,precipitation_sum",
+        "daily": "weather_code,temperature_2m_mean,temperature_2m_max,temperature_2m_min,precipitation_sum",
         "timezone": "auto"
     },
     "coords_param": {
@@ -48,8 +48,7 @@ params = {
         "language": "en"
     },
     "historical_param": {
-        "daily": "temperature_2m_mean,temperature_2m_max,temperature_2m_min,"
-                 "precipitation_sum,weather_code",
+        "daily": "temperature_2m_mean,temperature_2m_max,temperature_2m_min,precipitation_sum,weather_code",
         "timezone": "auto"
     }
 }

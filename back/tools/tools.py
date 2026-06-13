@@ -6,15 +6,13 @@ import datetime
 from langchain_core.tools import tool
 import requests
 from tavily import TavilyClient
-from dotenv import load_dotenv
 from pinecone import Pinecone
 from tools.weather_helper import interpret_weather_code, get_coordinates
 from tools.params_and_wmo import HISTORICAL_YEARS, PAST_WEATHER_URL, RAINY_DAY_THRESHOLD_MM, WEATHER_URL, params
 
-load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", "env.secret"))
 tavily_client = TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
 
-# @tool
+@tool
 def web_search(query: str) -> str:
     """
     Useful for retrieving real-time information on flight prices, local events, or any rapidly changing travel details that may not be captured in the static knowledge base.
@@ -26,7 +24,7 @@ def web_search(query: str) -> str:
     return response["answer"] if "answer" in response else "No results found. Please try a different query."
     # return response["results"][0]["content"] if response["results"] else "No results found. Please try a different query."
     
-# @tool
+@tool
 def get_weather_by_city(city_name: str) -> dict:
     """
     Useful when you need to get the current weather or a 7-day forecast 
@@ -39,7 +37,7 @@ def get_weather_by_city(city_name: str) -> dict:
     if "error" in coords:
         return coords
     try:
-        response = requests.get(WEATHER_URL, params=params["current_weather"] | {"latitude": coords["latitude"], "longitude": coords["longitude"]})
+        response = requests.get(WEATHER_URL, params=params["weather_param"] | {"latitude": coords["latitude"], "longitude": coords["longitude"]})
         response.raise_for_status()
         weather_data = response.json()
         # print(weather_data)
@@ -47,11 +45,11 @@ def get_weather_by_city(city_name: str) -> dict:
             "location": f"{coords['city']}, {coords['country']}",
             "latitude": coords["latitude"],
             "longitude": coords["longitude"],
-            "current_weather": interpret_weather_code(weather_data.get("current_weather", {}).get("weathercode")),
+            "current_weather": interpret_weather_code(weather_data.get("current_weather", {}).get("wmo_code")),
             "forecast": {
                 "days": weather_data.get("daily", {}).get("time", []),
-                "weather_codes": [interpret_weather_code(code) for code in weather_data.get("daily", {}).get("weathercode", [])],
-                "indoor_plan_recommendations": [interpret_weather_code(code)["requires_indoor_plan"] for code in weather_data.get("daily", {}).get("weathercode", [])],
+                "weather_codes": [interpret_weather_code(code) for code in weather_data.get("daily", {}).get("weather_code", [])],
+                "indoor_plan_recommendations": [interpret_weather_code(code)["requires_indoor_plan"] for code in weather_data.get("daily", {}).get("weather_code", [])],
                 "temp_mean": weather_data.get("daily", {}).get("temperature_2m_mean", []),
                 "temp_max": weather_data.get("daily", {}).get("temperature_2m_max", []),
                 "temp_min": weather_data.get("daily", {}).get("temperature_2m_min", []),
@@ -62,7 +60,7 @@ def get_weather_by_city(city_name: str) -> dict:
     except Exception as e:
         return {"error": f"Failed to fetch weather data: {str(e)}"}
     
-# @tool
+@tool
 def get_seasonal_weather_avg(city: str, month: str) -> dict:
     """
     Useful when you need to get the typical weather conditions for a specific city and month based on historical data.
@@ -144,7 +142,7 @@ def get_seasonal_weather_avg(city: str, month: str) -> dict:
     except Exception as e:
         return {"error": f"Historical baseline calculation failed: {str(e)}"}
 
-# @tool
+@tool
 def vector_db_search(query: str) -> str:
     """
     Useful for retrieving localized, contextually relevant information from the curated knowledge base during itinerary planning or when answering specific questions about a destination, budget considerations, activities.
@@ -160,14 +158,13 @@ def vector_db_search(query: str) -> str:
         inputs=[query],
         parameters={"input_type": "query"}
     )
-    
     query_vector = embedding_res.data[0].values
     results = index.query(vector=query_vector, top_k=3, include_metadata=True)
-    
+    # print(f"Vector DB Search Results for query: '{query}'\n{results}\n")
     matched_contexts = []
     for match in results.get("matches", []):
-        if "text" in match.get("metadata", {}):
-            matched_contexts.append(match["metadata"]["text"])
+        if "chunk" in match.get("metadata", {}):
+            matched_contexts.append(match["metadata"]["chunk"])
             
     if not matched_contexts:
         return "No local curated knowledge records found for this location matrix query."

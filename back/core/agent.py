@@ -1,56 +1,37 @@
 import os
-from typing import Annotated, Sequence, TypedDict
 from dotenv import load_dotenv
-
-# Import the dedicated OpenRouter class
 from langchain_openrouter import ChatOpenRouter
-from langchain_core.messages import BaseMessage
-from langgraph.graph import StateGraph, START, END
-from langgraph.graph.message import add_messages
-from langgraph.prebuilt import ToolNode, tools_condition
-from tools import get_weather, vector_db_search, web_search
+from langgraph.prebuilt import create_react_agent
+from langgraph.checkpoint.memory import MemorySaver  # Dedicated checkpointer wrapper
 
-load_dotenv()
+# Import your tools
+from tools.tools import get_weather_by_city, vector_db_search, web_search, get_seasonal_weather_avg
 
-# Define the State representing Short-Term Memory Context
-class AgentState(TypedDict):
-    messages: Annotated[Sequence[BaseMessage], add_messages]
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env.secret"))
 
-# Define Tools Array
-tools_list = [get_weather, vector_db_search, web_search]
-tool_node = ToolNode(tools_list)
+# Define tools list
+tools_list = [get_weather_by_city, get_seasonal_weather_avg, vector_db_search, web_search]
 
-# Bind system components and LLM using dedicated ChatOpenRouter integration
-# The package automatically searches for the OPENROUTER_API_KEY environment variable.
+# Native ChatOpenRouter Initialization
 model = ChatOpenRouter(
-    model="meta-llama/llama-3.3-70b-instruct", 
-    temperature=0
-).bind_tools(tools_list)
+    model="openai/gpt-4o-mini",
+    temperature=0,
+    max_retries=1,
+)
 
-def call_model(state: AgentState):
-    system_prompt = (
-        "You are an expert TravelAi Planner who leverages autonomous multi-hop reasoning.\n"
-        "If a user proposes a location plan:\n"
-        "Hop 1: Query weather codes using appropriate coordinates.\n"
-        "Hop 2: Use the returned weather context to perform optimized Vector DB lookups "
-        "or fallback web searches to design a perfectly tuned 2-day itinerary.\n"
-        "Always communicate constraints based on the weather rules retrieved."
-    )
-    messages = state["messages"]
-    # Ensure system guidance is injected at the start
-    if len(messages) == 1:
-         messages = [{"role": "system", "content": system_prompt}] + list(messages)
-    response = model.invoke(messages)
-    return {"messages": [response]}
+system_prompt = (
+    "You are an expert TravelAi Planner who leverages autonomous multi-hop reasoning.\n"
+    "Use the provided tools to gather information, analyze options, and create personalized travel itineraries based on user preferences and constraints.\n"
+    "Always think step-by-step, and if you need specific data (like weather forecasts, local insights, or historical trends), invoke the relevant tool to fetch that information before proceeding with your reasoning."
+)
 
-# Build LangGraph State Framework Workflow
-workflow = StateGraph(AgentState)
-workflow.add_node("agent", call_model)
-workflow.add_node("tools", tool_node)
+# Initialize MemorySaver to persist checkpoints across execution cycles
+memory_checkpointer = MemorySaver()
 
-workflow.add_edge(START, "agent")
-workflow.add_conditional_edges("agent", tools_condition)
-workflow.add_edge("tools", "agent")
-
-# Compile state architecture engine
-travel_agent_graph = workflow.compile()
+# Pass checkpointer into the prebuilt ReAct agent
+travel_agent_graph = create_react_agent(
+    model, 
+    tools=tools_list, 
+    prompt=system_prompt,
+    checkpointer=memory_checkpointer # Activates out-of-the-box conversational state preservation
+)
